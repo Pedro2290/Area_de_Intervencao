@@ -1,0 +1,69 @@
+import geopandas as gpd
+import pandas as pd
+import matplotlib
+
+supressao = ['FESD', 'FESD-I']
+corte = ['Pastagem']
+sem_sup = ['Acessos', 'Agricultura', 'Área Urbana']
+ 
+
+def app(curso_agua):
+    perma = curso_agua[curso_agua['regime'] == 'Permanente']
+    perma['geometry'] = perma.buffer(30)
+    app = perma.dissolve()
+    return app
+
+def areas_interv(uso, ada, app_):
+    ada_sem_app = gpd.overlay(ada, app_, how = 'difference')
+    uso_ada = gpd.overlay(uso, ada_sem_app, how = 'intersection')                         #recortar o uso na área diretamente afetada
+
+    # Classificar uso pela tipologia de intervenção
+    sem_supressao_ = uso_ada.loc[uso_ada['classe'].isin(sem_sup)]                 # Áreas que não são passívels de supressão
+    
+    corte_ = uso_ada.loc[uso_ada['classe'].isin(corte)].dissolve().explode()                # Seleciona os usos pela lista definida e dissolve em cada classe
+    supressao_ = uso_ada.loc[uso_ada['classe'].isin(supressao)].dissolve().explode()        # Seleciona os usos pela lista definida e dissolve em cada classe
+
+    
+
+
+    
+    corte_['classe'] = 'Corte'                                                    # classificar por tipologia na tabela de atributos
+    supressao_['classe'] = 'Supressão'                                            # classificar por tipologia na tabela de atributos
+    
+    corte_['poligono'] = range(1, len(corte_)+1)
+    supressao_['poligono'] = range(1, len(supressao_)+1) 
+
+    areas_intervencao = pd.concat([corte_, supressao_]).explode(ignore_index = True)
+    areas_intervencao['area'] = areas_intervencao.loc[:, 'geometry'].area / 10000
+    areas_intervencao['perimetro'] = areas_intervencao.loc[:, 'geometry'].length
+    
+    return areas_intervencao
+
+
+def vertices(poligono):
+    cor = poligono.loc[poligono['classe'] == 'Corte']
+    sup = poligono.loc[poligono['classe'] == 'Supressão']
+     
+    vertice = cor.extract_unique_points()                   # extrair vértices dos pontos
+    ver = vertice.explode()                                      # explodir os multipontos em partes simples
+    ver = gpd.GeoDataFrame(geometry = gpd.GeoSeries(ver))        # converter formato de geoseries para geodataframe
+    ver['Poligono'] = ver.index + 1                              # o índice fica armazenado como index, esta parte transforma o index em uma coluna referente ao polígono
+    ver['classe'] = 'Corte'
+    ver['x'] = ver.geometry.x
+    ver['y'] = ver.geometry.y
+
+    ver['vertice'] = range(1, len(ver) +1)
+    
+    vertice_ = sup.extract_unique_points()                          # extrair vértices dos pontos
+    ver_ = vertice_.explode()                                      # explodir os multipontos em partes simples
+    ver_ = gpd.GeoDataFrame(geometry = gpd.GeoSeries(ver_))        # converter formato de geoseries para geodataframe
+    ver_['Poligono'] = ver_.index + 1
+    ver_['classe'] = 'Supressão'
+    ver_['x'] = ver_.geometry.x
+    ver_['y'] = ver_.geometry.y
+
+    ver_['vertice'] = range(1, len(ver_) +1)
+    
+    vertices_merg = pd.concat([ver, ver_])
+    return vertices_merg
+    
