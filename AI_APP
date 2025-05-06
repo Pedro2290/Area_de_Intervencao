@@ -1,0 +1,28 @@
+# Função para extrair os polígonos da área de intervenção em app
+
+def ai_app(curso_agua, ada):
+    perma = curso_agua[curso_agua['regime'] == 'Permanente']       # selecionar os cursos d'água permanentes
+    perma['geometry'] = perma.buffer(30)                           # gerar a app (cursos d'água de 30 metros)
+    app = perma.dissolve()                                         # dissolver a app
+    
+    ai_app = gpd.overlay(ada, app, how = 'intersection')           # interseção entre a app e a área diretamente afetada
+    ai_app_pu = ai_app.explode(ignore_index = True)                # transforma em partes simples (multipolygon para polygon). ignore_index = True para que o índice seja enurado
+
+    ai_app_pu['poligono'] = range(1, len(ai_app_pu)+1)             # criar coluna com os polígonos numerados
+    ai_app_pu['area'] = ai_app_pu.loc[:,'geometry'].area / 10000   # calculo da área em hectares
+
+    ai_app_pu['Perimetro'] = ai_app_pu.length                      # criar as linhas perímetro em metros
+    return ai_app_pu
+
+
+# Função para obter os vértices enumerados por parte do polígono
+def vertices(poligono):
+    vertice = poligono.extract_unique_points()                   # extrair vértices dos pontos
+    ver = vertice.explode()                                      # explodir os multipontos em partes simples
+    ver = gpd.GeoDataFrame(geometry = gpd.GeoSeries(ver))        # converter formato de geoseries para geodataframe
+    ver['Poligono'] = ver.index + 1                              # o índice fica armazenado como index, esta parte transforma o index em uma coluna referente ao polígono
+    ver['x'] = ver.geometry.x
+    ver['y'] = ver.geometry.y
+
+    ver['vertice'] = range(1, len(ver)+1)
+    return ver
